@@ -1,0 +1,2186 @@
+import random
+import discord
+from discord import app_commands
+from discord.ext import commands
+import aiohttp
+import typing
+import datetime
+from rcon.source import rcon
+from dotenv import load_dotenv
+import json
+import os
+import re
+import sys
+import math
+import asyncio
+import time
+
+load_dotenv()
+pending_links = {}  
+pending_elders = {}  
+elder_session_used = {}
+active_elder_tokens = {}
+current_player_dino = {}
+discord_to_alderon = {}
+TOKEN = os.getenv('TOKEN')
+
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+POT_SERVER_ID = 'SERVER_ID'
+DAY_LENGTH_MINUTES = 90
+RCON_IP = ""
+RCON_PORT = 
+RCON_PASS = ""
+BRIDGE_CHANNEL_ID = DISCORD_CHANNEL_ID 
+LOG_CHANNEL_ID = DISCORD_CHANNEL_ID
+CHAT_CHANNEL_ID = DISCORD_CHANNEL_ID
+
+DINO_LIST = ["Albertaceratops", "Ampelosaurus", "Austroraptor", "Barsboldia", "Bonapartenykus", "Carnotaurus",
+             "Ceratosaurus", "Compsognathus", "Dilophosaurus", "Eotriceratops", "Halszkaraptor", "Iguanodon",
+             "Kelenken", "Kentrosaurus", "Lambeosaurus", "Latenivenatrix", "Maip", "Pachycephalosaurus",
+             "Pachyrhinosaurus", "Peloroplites", "Psittacosaurus", "Rhamphorhynchus", "Stegosaurus", "Suchomimus",
+             "Torvosaurus", "Tyrannosaurus", "Tyrannotitan","Utahraptor", "Yunnanosaurus"]
+MAX_EGGS = {"albertaceratops": 2, "ampelosaurus": 1, "austroraptor": 100, "barsboldia": 100, "bonapartenykus": 6,
+            "carnotaurus": 100, "ceratosaurus": 5, "compsognathus": 5, "dilophosaurus": 2, "eotriceratops": 0,
+            "halszkaraptor": 3, "iguanodon": 2, "kelenken": 3, "kentrosaurus": 3, "lambeosaurus": 4,
+            "latenivenatrix": 100, "maip": 4, "pachycephalosaurus": 100, "pachyrhinosaurus": 0, "Peloroplites": 100, "psittacosaurus": 8,
+            "rhamphorhynchus": 5, "stegosaurus": 100, "suchomimus": 4, "torvosaurus": 4,
+            "tyrannosaurus": 10, "tyrannotitan": 0, "utahraptor": 1, "yunnanosaurus": 100}
+DINO_TIERS = {
+    "tiny": ["compsognathus", "halszkaraptor", "psittacosaurus", "rhamphorhynchus"],
+    "small": ["bonapartenykus", "latenivenatrix"],
+    "medium": ["albertaceratops", "austroraptor", "ceratosaurus", "dilophosaurus", "kelenken", "kentrosaurus", "pachycephalosaurus", "lambeosaurus", "utahraptor"],
+    "large": ["carnotaurus", "iguanodon", "maip", "pachyrhinosaurus", "peloroplites", "stegosaurus", "suchomimus", "torvosaurus", "yunnanosaurus"],
+    "huge": ["ampelosaurus", "barsboldia", "eotriceratops", "tyrannosaurus", "tyrannotitan"]
+}
+DINO_DIETS = {
+    "herbivore": [
+        "Albertaceratops", "Ampelosaurus", "Barsboldia", "Bonapartenykus",
+        "Eotriceratops", "Halszkaraptor", "Iguanodon", "Kentrosaurus",
+        "Lambeosaurus", "Pachyrhinosaurus", "Peloroplites", "Stegosaurus", "Yunnanosaurus"
+    ],
+    "carnivore": [
+        "Austroraptor", "Carnotaurus", "Ceratosaurus", "Compsognathus",
+        "Dilophosaurus", "Kelenken", "Latenivenatrix", "Maip",
+        "Rhamphorhynchus", "Suchomimus", "Torvosaurus", "Tyrannosaurus", "Tyrannotitan","Utahraptor"
+    ],
+    "omnivore": [
+        "Pachycephalosaurus", "Psittacosaurus", "Citipati"
+    ]
+}
+IMG_URLS = {
+    "standard": "https://media.discordapp.net/attachments/1468083067750191224/1468084594946478305/image.png?ex=698c9f13&is=698b4d93&hm=c5d0a8dc0b93441770398906837cb0dcf6e824f9219fa1c57f01850f3c4e9cbe&=&format=webp&quality=lossless",
+    "albino": "https://media.discordapp.net/attachments/1438446651281899613/1464715167198871703/211578a0baf2fc09daa6938784bcca8c.png?ex=697679cc&is=6975284c&hm=8257a23bbfa024eaa9fb3205a5191971f834f8e80f6d1d8530c0f4b2b26d122c&=&format=webp&quality=lossless&width=1606&height=903",
+    "melanism": "https://media.discordapp.net/attachments/1438446651281899613/1464715166280192173/66619c1290918138b25dbc124f62cfe8.png?ex=697679cc&is=6975284c&hm=eff465684b4267c031242d2472c11a6b3b012b6e51927601c3e739ccbef1712f&=&format=webp&quality=lossless&width=1606&height=903",
+    "piebald": "https://media.discordapp.net/attachments/1438446651281899613/1464715168314425551/image.png?ex=697679cd&is=6975284d&hm=7dfea31f428a0225a71387cfd11db42d6b2cd8a37a1befe2d456b639a3de8ad8&=&format=webp&quality=lossless&width=1768&height=666",
+    "leucism": "https://media.discordapp.net/attachments/1438446651281899613/1464508543221895200/bd42a511f7c39acaefa05be134571903.png?ex=69770add&is=6975b95d&hm=445d8a786cd9b0c5cb632a33a52c6ea701e7ecb3681638de5ebf6656acef8e8f&=&format=webp&quality=lossless&width=1635&height=920",
+    "gynandromorphy": "https://media.discordapp.net/attachments/1438446651281899613/1464524985908330549/Screenshot_2025-12-14_214108.png?ex=69771a2e&is=6975c8ae&hm=87b30b460ad9144e804b37b6137e9a544b569fc6e5a3d2215a4ba027c7fc3476&=&format=webp&quality=lossless&width=1472&height=920",
+    "pseudo-melanism": "https://media.discordapp.net/attachments/1438446651281899613/1464505473481965619/442271906cfd692e657ac461d6b697c1.png?ex=69770802&is=6975b682&hm=8d17594c809bf93b8fdd94e9c7811e56304da0911b8d69a060042c2dddda2ca5&=&format=webp&quality=lossless&width=1635&height=920"
+}
+
+SHOP_ITEMS = {
+    "Double Nest": {
+        "description": "*Make it a double.*\nDoubles the max number of eggs in a nest.\n\n\n",
+        "cost": 500,
+        "stock": 98691,
+        "emoji": "🪺"
+    },
+    "Alternative Nest": {
+        "description": "*Making magic here.*\nA solitary dino or same-sex pair finds an abandoned nest and adopts the offspring.\n*OR*\nA solitary female goes through parthenogenesis and lays a clutch without a mate.\n\nOffspring are considered related. \n**Must make a ticket.**\n\n\n",
+        "cost": 500,
+        "stock": 98691,
+        "emoji": "🍂"
+    },
+    "Catastrophic Event": {
+        "description": "*This is fine.*\nChoose a large area to receive a catastrophe! Fires, Blizzards, Tarpits, & More.\n**Must make a ticket & give 24 hour notice.**\n\n\n",
+        "cost": 500,
+        "stock": 98691,
+        "emoji": "🔥"
+    },
+    "Custom Den": {
+        "description": "*Build your dream home.*\nSets a custom made den for 7 days.\n**Must make a ticket & give 24 hour notice.**\n\n\n",
+        "cost": 500,
+        "stock": 98691,
+        "emoji": "🏠"
+    },
+    "Orphaned Together": {
+        "description": "*Wait a minute. Who Are You*?\nAllows 2 orphaned (non-nested), hatchling dinos of the same species to be related.\n**Must make a ticket.**\n\n\n",
+        "cost": 500,
+        "stock": 98691,
+        "emoji": "🪽"
+    },
+    "Scar Removal": {
+        "description": "*A fresh start.*\nResets all scars on your dino.\n**Must make a ticket.**\n\n\n",
+        "cost": 500,
+        "stock": 98691,
+        "emoji": "🥱"
+    },
+    "Water Spawn": {
+        "description": "*Get this guy a drink.*\nSets a waterpot in an area of your choice.\n**Must make a ticket.**\n\n\n",
+        "cost": 500,
+        "stock": 98691,
+        "emoji": "🌊"
+    },
+    "Food Spawn": {
+        "description": "*Why you eat so much*?\nSets a corpse/critter burrow OR berry bush in an area of your choice.\n**Must make a ticket.**\n\n\n",
+        "cost": 500,
+        "stock": 98691,
+        "emoji": "🍕"
+    },
+    "Shrink Ray": {
+        "description": "*Honey, I shrunk the kids*!\nSets your dino to sub-adult. Useful to maintain pygmy or dwarf dinos.\n**Must make a ticket.**\n\n\n",
+        "cost": 500,
+        "stock": 98691,
+        "emoji": "🦐"
+    },
+    "Gender Swap": {
+        "description": "*That's a woman?*!\nChanges your dino's gender from male to female or female to male. Can only be used once per dino.\n**Must make a ticket.**\n\n\n",
+        "cost": 500,
+        "stock": 98691,
+        "emoji": "🔄"
+    }
+}
+
+NESTING_ITEMS = ["Double Nest"]
+
+MUTATION_ACCESS = {
+    "leucism": ["Pachycephalosaurus", "Eotriceratops", "Citipati"],
+    "piebald": ["Austroraptor", "Pachycephalosaurus", "Albertaceratops", "Eotriceratops", "Iguanodon", "Bonapartenykus", "Ceratosaurus", "Barsboldia"],
+    "gynandromorphy": ["Pachycephalosaurus", "Albertaceratops", "Eotriceratops"],
+    "pseudo-melanism": ["Albertaceratops"],
+    "albino": ["Albertaceratops", "Ampelosaurus", "Austroraptor", "Barsboldia", "Eotriceratops", "Halszkaraptor", "Iguanodon", "Kentrosaurus", "Lambeosaurus", "Pachycephalosaurus", "Pachyrhinosaurus", "Peloroplites", "Psittacosaurus", "Stegosaurus", "Yunnanosaurus", "Carnotaurus", "Ceratosaurus", "Compsognathus", "Dilophosaurus", "Kelenken", "Latenivenatrix", "Maip", "Rhamphorhynchus", "Suchomimus", "Torvosaurus", "Tyrannosaurus", "Utahraptor"],
+    "melanism": ["Albertaceratops", "Ampelosaurus", "Austroraptor", "Barsboldia", "Eotriceratops", "Halszkaraptor", "Iguanodon", "Kentrosaurus", "Lambeosaurus", "Pachycephalosaurus", "Pachyrhinosaurus", "Peloroplites", "Psittacosaurus", "Stegosaurus", "Yunnanosaurus", "Carnotaurus", "Ceratosaurus", "Compsognathus", "Dilophosaurus", "Kelenken", "Latenivenatrix", "Maip", "Rhamphorhynchus", "Suchomimus", "Torvosaurus", "Tyrannosaurus", "Utahraptor"]
+}
+
+last_sync = {"game_time": 1200, "real_time": datetime.datetime.now()}
+
+ELDER_DATA = {
+    "tiny": {
+        "base_cw": 75, "bonus_cw": 25,
+        "start_speed": 0.98, "reduction": 0.02,
+        "ages": [("3-4", 10, 0), ("4-5", 15, 1), ("5-6", 30, 2), ("7+", 50, 3)]
+    },
+    "small": {
+        "base_cw": 100, "bonus_cw": 30,
+        "start_speed": 0.98, "reduction": 0.02,
+        "ages": [("4-5", 10, 0), ("6-7", 15, 1), ("8-9", 30, 2), ("10+", 50, 3)]
+    },
+    "medium": {
+        "base_cw": 150, "bonus_cw": 40,
+        "start_speed": 0.98, "reduction": 0.02,
+        "ages": [("5-7", 10, 0), ("8-9", 15, 1), ("10-12", 30, 2), ("13+", 50, 3)]
+    },
+    "large": {
+        "base_cw": 200, "bonus_cw": 50,
+        "start_speed": 0.98, "reduction": 0.02,
+        "ages": [("6-8", 10, 0), ("9-11", 15, 1), ("12-14", 30, 2), ("15+", 50, 3)]
+    },
+    "huge": {
+        "base_cw": 250, "bonus_cw": 60,
+        "start_speed": 0.98, "reduction": 0.02,
+        "ages": [("7-9", 10, 0), ("10-13", 15, 1), ("14-17", 30, 2), ("18+", 50, 3)]
+    }
+}
+
+def get_tier_from_dino(dino_name):
+    dino_name_lower = dino_name.lower()
+    for tier, dinos in DINO_TIERS.items():
+        if any(dino.lower() == dino_name_lower for dino in dinos):
+            return tier
+    return None
+
+
+def check_mutation_cooldown(user_id, species):
+    history_file = 'mutation_history.json'
+    if not os.path.exists(history_file):
+        return True, ""
+
+    with open(history_file, 'r') as f:
+        try:
+            history = json.load(f)
+        except:
+            history = {}
+
+    user_data = history.get(str(user_id), {})
+    now = time.time()
+
+    last_global = user_data.get("last_global_roll", 0)
+    if now - last_global < 10800:
+        wait_time = int((10800 - (now - last_global)) // 60)
+        return False
+
+    species_history = user_data.get("species_rolls", {})
+    last_species = species_history.get(species.lower(), 0)
+    if now - last_species < 86400:
+        wait_time = int((86400 - (now - last_species)) // 3600)
+        return False, f"🦖 **Species Cooldown:** You already rolled for {species.title()} today. Try again in {wait_time} hours."
+
+    return True, ""
+
+
+def consume_item(discord_id, item_name):
+    inventory = load_inventory()
+    user_data = inventory.get(str(discord_id))
+
+    if not user_data:
+        return False
+
+    for i, item in enumerate(user_data['items']):
+        if item['name'].lower() == item_name.lower():
+            user_data['items'].pop(i)
+            save_inventory(inventory)
+            return True
+
+    return False
+
+def update_mutation_history(user_id, species):
+    history_file = 'mutation_history.json'
+    history = {}
+    if os.path.exists(history_file):
+        with open(history_file, 'r') as f:
+            try:
+                history = json.load(f)
+            except:
+                history = {}
+
+    user_id_str = str(user_id)
+    if user_id_str not in history:
+        history[user_id_str] = {"last_global_roll": 0, "species_rolls": {}}
+
+    now = time.time()
+    history[user_id_str]["last_global_roll"] = now
+    history[user_id_str]["species_rolls"][species.lower()] = now
+
+    with open(history_file, 'w') as f:
+        json.dump(history, f, indent=4)
+
+class ElderAgeSelect(discord.ui.Select):
+    def __init__(self, tier_key):
+        self.tier_key = tier_key
+        options = [
+            discord.SelectOption(label=f"Age {age_str}", value=f"{chance}|{level}")
+            for age_str, chance, level in ELDER_DATA[tier_key]["ages"]
+        ]
+        super().__init__(placeholder="Select your current age...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        alderon_id = get_alderon_id(interaction.user.id)
+
+        if not alderon_id:
+            return await interaction.response.edit_message(content="❌ Account not linked! Use /link first.", view=None)
+
+        if elder_session_used.get(alderon_id, False):
+            return await interaction.response.edit_message(
+                content="⚠️ **Session Limit:** You have already prepared an Elder mutation for this life.\n"
+                        "Please return to the character screen and load back in to roll again.",
+                view=None
+            )
+
+        chance, level = map(int, self.values[0].split('|'))
+        tier_stats = ELDER_DATA[self.tier_key]
+
+        total_cw = tier_stats["base_cw"] + (tier_stats["bonus_cw"] * level)
+        total_speed = tier_stats["start_speed"] - (level * tier_stats["reduction"])
+        total_speed = round(total_speed, 2)
+
+        roll = random.randint(1, 100)
+        fate = "die" if roll <= chance else "live"
+
+        code = str(random.randint(10000, 99999))
+
+        pending_elders[code] = {
+            "fate": fate,
+            "cw": total_cw,
+            "speed": total_speed,
+            "aid": alderon_id,
+            "discord_id": interaction.user.id,  # ADD THIS LINE
+            "expiry": (datetime.datetime.now() + datetime.timedelta(days=21)).timestamp()
+        }
+
+        embed = discord.Embed(
+            title="🧬 Elder Mutation Prepared",
+            description=(
+                f"**Tier:** {self.tier_key.title()}\n"
+                f"**In-Game Code:** `!elder {code}`\n\n"
+                "*Enter the code in-game to discover your fate.*"
+            ),
+            color=discord.Color.dark_gray()
+        )
+        await interaction.response.edit_message(content=None, embed=embed, view=None)
+
+class ElderTierSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Small", value="small"),
+            discord.SelectOption(label="Medium", value="medium"),
+            discord.SelectOption(label="Large", value="large"),
+            discord.SelectOption(label="Huge", value="huge"),
+        ]
+        super().__init__(placeholder="Choose your dinosaur's size...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        tier_key = self.values[0]
+        view = discord.ui.View()
+        view.add_item(ElderAgeSelect(tier_key))
+
+        await interaction.response.edit_message(
+            content=f"Selected **{tier_key.title()}**. What is the age of this creature?", view=view)
+
+
+class ElderStartView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.add_item(ElderTierSelect())
+
+try:
+    if os.path.exists('links.json'):
+        with open('links.json', 'r') as f:
+            user_links = json.load(f)
+    else:
+        user_links = {}
+except Exception:
+    user_links = {}
+
+def reload_active_tokens():
+    global active_elder_tokens
+    current_time = datetime.datetime.now().timestamp()
+    db = load_elders()
+    cleaned_db = {}
+
+    for alderon_id, sessions in db.items():
+        if not isinstance(sessions, list):
+            sessions = [sessions]
+
+        valid_sessions = [s for s in sessions if s.get('expiry', 0) > current_time]
+
+        if valid_sessions:
+            cleaned_db[alderon_id] = valid_sessions
+
+    active_elder_tokens = cleaned_db
+    save_elders(cleaned_db)
+    print(f"🔄 Reloaded {len(cleaned_db)} users with valid Elder sessions.")
+
+
+def load_elders():
+    if os.path.exists('active_elders.json'):
+        with open('active_elders.json', 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_elders(data):
+    with open('active_elders.json', 'w') as f:
+        json.dump(data, f, indent=4)
+
+def save_link(discord_id, alderon_id):
+    user_links[str(discord_id)] = alderon_id
+    with open('links.json', 'w') as f:
+        json.dump(user_links, f, indent=4)
+
+def load_economy():
+    """Loads the economy data from the JSON file."""
+    if os.path.exists('economy.json'):
+        with open('economy.json', 'r') as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {} 
+    return {}
+
+def save_economy(data):
+    """Saves the economy data to the JSON file."""
+    with open('economy.json', 'w') as f:
+        json.dump(data, f, indent=4)
+
+async def get_ingame_time():
+    global last_sync
+    now = datetime.datetime.now()
+    elapsed_real_seconds = (now - last_sync["real_time"]).total_seconds()
+    game_minutes_per_real_second = 1440 / (DAY_LENGTH_MINUTES * 60)
+    elapsed_game_minutes = elapsed_real_seconds * game_minutes_per_real_second
+    total_game_minutes = (last_sync["game_time"] // 100 * 60) + (last_sync["game_time"] % 100) + elapsed_game_minutes
+    final_total_minutes = total_game_minutes % 1440
+    game_hour = int(final_total_minutes // 60)
+    game_minute = int(final_total_minutes % 60)
+    military_num = f"{game_hour}{game_minute:02d}"
+    if len(military_num) >= 4:
+        return f"{military_num[:-3]},{military_num[-3:]}"
+    return military_num
+
+
+class CalamityBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        intents.members = True
+        super().__init__(command_prefix="!", intents=intents)
+
+    async def setup_hook(self):
+        await self.tree.sync()
+        print(f"✅ Bot Online: {self.user}")
+
+
+bot = CalamityBot()
+
+@bot.event
+async def on_ready():
+    global discord_to_alderon
+    if os.path.exists('links.json'):
+        with open('links.json', 'r') as f:
+            discord_to_alderon = json.load(f)
+
+    print(f'--- Bot Startup Sequence ---')
+    print(f'Logged in as: {bot.user} (ID: {bot.user.id})')
+
+    reload_active_tokens()
+
+    print(f'✅ Bot is fully ready! {len(discord_to_alderon)} linked users loaded.')
+
+
+async def mutations_dino_autocomplete(
+        interaction: discord.Interaction,
+        current: str,
+) -> list[app_commands.Choice[str]]:
+    all_dinos = []
+    for species_list in DINO_DIETS.values():
+        all_dinos.extend(species_list)
+    choices = [
+        app_commands.Choice(name=dino, value=dino)
+        for dino in all_dinos if current.lower() in dino.lower()
+    ]
+
+    # 3. Sort them A-Z and limit to 25 (Discord's maximum)
+    try:
+        await interaction.response.autocomplete(sorted(choices, key=lambda x: x.name)[:25])
+    except discord.errors.NotFound:
+        pass
+    return []
+
+# --- SLASH COMMANDS ---
+@bot.tree.command(name="mutations", description="Roll for rare visual and unseen mutations")
+@app_commands.describe(dino="Which dinosaur are you rolling for?")
+@app_commands.autocomplete(dino=mutations_dino_autocomplete)
+async def mutations(interaction: discord.Interaction, dino: str):
+
+    dino_name = dino.title()
+
+    can_roll = check_mutation_cooldown(interaction.user.id, dino_name)
+
+    if not can_roll:
+        return await interaction.followup.send("⏳ You are on cooldown!", ephemeral=True)
+
+    visual_roll = random.randint(1, 100)
+    unseen_roll = random.randint(1, 100)
+
+    result_text = f"Standard {dino_name} (No Visual Mutation)"
+    selected_img = IMG_URLS["standard"]
+    color = discord.Color.dark_gray()
+
+    if visual_roll == 1 and dino_name in MUTATION_ACCESS["albino"]:
+        result_text = f"✨ **ALBINO {dino_name.upper()}** ✨"
+        selected_img = IMG_URLS["albino"]
+        color = discord.Color.white()
+
+    elif (2 <= visual_roll <= 3) and dino_name in MUTATION_ACCESS["melanism"]:
+        result_text = f"🖤 **MELANISTIC {dino_name.upper()}** 🖤"
+        selected_img = IMG_URLS["melanism"]
+        color = discord.Color.from_rgb(30, 30, 30)
+
+    elif (4 <= visual_roll <= 6) and dino_name in MUTATION_ACCESS["piebald"]:
+        result_text = f"⚪ **PIEBALD {dino_name.upper()}** ⚪"
+        selected_img = IMG_URLS["piebald"]
+        color = discord.Color.light_gray()
+
+    elif (7 <= visual_roll <= 9) and dino_name in MUTATION_ACCESS["leucism"]:
+        result_text = f"❄️ **LEUCISTIC {dino_name.upper()}** ❄️"
+        selected_img = IMG_URLS["leucism"]
+        color = discord.Color.brand_red()
+
+    elif (10 <= visual_roll <= 12) and dino_name in MUTATION_ACCESS["gynandromorphy"]:
+        result_text = f"🌓 **GYNANDROMORPH {dino_name.upper()}** 🌓"
+        selected_img = IMG_URLS["gynandromorphy"]
+        color = discord.Color.teal()
+
+    elif (13 <= visual_roll <= 15) and dino_name in MUTATION_ACCESS["pseudo-melanism"]:
+        result_text = f"🌘 **PSEUDO-MELANISTIC {dino_name.upper()}** 🌘"
+        selected_img = IMG_URLS["pseudo-melanism"]
+        color = discord.Color.dark_purple()
+
+    unseen_msg = ""
+    if unseen_roll <= 5:
+        defect = random.choice(["Congenital Blindness", "Congenital Deafness", "Congenital Muteness"])
+        unseen_msg = f"\n\n⚠️ **UNSEEN MUTATION DETECTED:** {defect}"
+
+    update_mutation_history(interaction.user.id, dino_name)
+
+    embed = discord.Embed(
+        title="🧬 Mutation Results",
+        description=f"{result_text}{unseen_msg}",
+        color=color
+    )
+    embed.set_image(url=selected_img)
+
+    await interaction.followup.send(embed=embed)
+
+@bot.tree.command(name="inherit", description="Roll inheritance directly from a nest link")
+@app_commands.describe(link="The link to the nesting post")
+async def inherit(interaction: discord.Interaction, link: str):
+    try:
+        await interaction.response.defer()
+    except discord.errors.NotFound:
+        return
+
+    try:
+        parts = link.split('/')
+        channel_id = int(parts[-2])
+        message_id = int(parts[-1])
+        channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+        message = await channel.fetch_message(message_id)
+
+        if not message.embeds:
+            return await interaction.followup.send("❌ That link doesn't have a valid nest embed.")
+
+        embed = message.embeds[0]
+        
+        dino_name = embed.title.replace("🥚 Nesting: ", "").replace("❌ Nest Expired: ", "").split('[')[0].strip()
+
+        parent_text = ""
+        for field in embed.fields:
+            if "Mother" in field.name or "Father" in field.name:
+                parent_text += f" {field.value}"
+
+        found_displays = re.findall(r"Display:\s*([\w-]+)", parent_text, re.IGNORECASE)
+        found_carries = re.findall(r"Carrier:\s*([\w-]+)", parent_text, re.IGNORECASE)
+
+        mutation_chances = {}
+        all_potential_muts = []
+
+        for mut in found_displays:
+            name = mut.capitalize()
+            # 1% base + 4% bonus = 5%
+            mutation_chances[name] = mutation_chances.get(name, 0) + 5
+            if name not in all_potential_muts: all_potential_muts.append(name)
+
+        for mut in found_carries:
+            name = mut.capitalize()
+            # 1% base + 2% bonus = 3%
+            mutation_chances[name] = mutation_chances.get(name, 0) + 3
+            if name not in all_potential_muts: all_potential_muts.append(name)
+
+        if not all_potential_muts:
+            return await interaction.followup.send(
+                f"❌ No mutations found on the parents of this **{dino_name}** nest.\n"
+                f"*Note: I look for text like 'Display: MutationName' or 'Carrier: MutationName'.*"
+            )
+
+        successful_inheritance = []
+        for mut_name, chance in mutation_chances.items():
+            if random.randint(1, 100) <= chance:
+                successful_inheritance.append(mut_name)
+
+        winner_key = "standard"
+        color = discord.Color.dark_gray()
+
+        def format_list(items, connector="and"):
+            formatted = [f"**{i}**" for i in items]
+            if len(formatted) == 1: return formatted[0]
+            return f"{', '.join(formatted[:-1])} {connector} {formatted[-1]}"
+
+        if successful_inheritance:
+            winner = successful_inheritance[0]
+            winner_key = winner.lower()
+            msg = f"✨ **SUCCESS!** ✨\nYou have inherited and **display** the **{winner}** mutation!"
+
+            color_map = {
+                "albino": discord.Color.white(),
+                "melanistic": discord.Color.from_rgb(30, 30, 30),
+                "piebald": discord.Color.light_gray(),
+                "leucistic": discord.Color.brand_red()
+            }
+            color = color_map.get(winner_key, discord.Color.green())
+
+            other_genes = [m for m in all_potential_muts if m != winner]
+            if other_genes:
+                msg += f"\n\n*You also carry genetics for: {format_list(other_genes, 'and')}.*"
+        else:
+            potential_str = format_list(all_potential_muts, "or")
+            msg = f"**Standard {dino_name}**\n\n*You do not display {potential_str}, but you have inherited the genetics. Your offspring may display them!*"
+
+        result_embed = discord.Embed(
+            title=f"Inheritance: {dino_name}",
+            description=msg,
+            color=color
+        )
+        img_url = IMG_URLS.get(winner_key, IMG_URLS.get("standard"))
+        result_embed.set_image(url=img_url)
+        result_embed.set_footer(text=f"Hatchling: {interaction.user.display_name}")
+
+        await interaction.followup.send(embed=result_embed)
+
+    except Exception as e:
+        await interaction.followup.send(f"⚠️ Error processing inheritance: `{e}`")
+
+@bot.tree.command(name="sync_time", description="Sync the bot's clock with the in-game time")
+@app_commands.checks.has_permissions(administrator=True)
+async def sync_time(interaction: discord.Interaction, numerical_time: int):
+    await interaction.response.defer(ephemeral=True)
+    global last_sync
+    last_sync["game_time"] = numerical_time
+    last_sync["real_time"] = datetime.datetime.now()
+    time_str = str(numerical_time)
+    formatted = f"{time_str[:-3]},{time_str[-3:]}" if numerical_time >= 1000 else time_str
+    await interaction.followup.send(f"✅ Bot time successfully synced to **{formatted}**")
+
+@bot.tree.command(name="test_rcon", description="Check RCON connection")
+@app_commands.checks.has_permissions(administrator=True)
+async def test_rcon(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        response = await rcon("status", host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+        await interaction.followup.send(f"✅ Success! Response: {response}")
+    except Exception as e:
+        await interaction.followup.send(f"❌ Connection Failed: {e}")
+
+
+@bot.tree.command(name="status", description="Check the current server status")
+async def status(interaction: discord.Interaction):
+    await interaction.response.defer()
+
+    try:
+        raw_info = await rcon("ServerInfo", host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+        raw_players = await rcon("ListPlayers", host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+        player_list = [p for p in raw_players.split("\n") if p.strip()]
+        player_count = len(player_list)
+
+        parts = raw_info.split("/")
+        server_name, time_of_day, weather = "Unknown", "Unknown", "Unknown"
+
+        for part in parts:
+            if "Server Name" in part:
+                server_name = part.split(":")[1].strip()
+            elif "TimeOfDay" in part:
+                digits = "".join(filter(str.isdigit, part))[:4]
+                if len(digits) >= 3:
+                    h, m = int(digits[:2]), int(digits[2:4])
+                    suffix = "AM" if h < 12 else "PM"
+                    dh = 12 if h % 12 == 0 else h % 12
+                    time_of_day = f"{dh}:{m:02d} {suffix}"
+            elif "Weather" in part:
+                weather = part.split(":")[1].strip()
+
+        embed = discord.Embed(
+            title=f"📊 {server_name}",
+            color=discord.Color.green()
+        )
+
+        embed.add_field(name="☁️ Weather", value=weather, inline=True)
+        embed.add_field(name="\u200b", value="\u200b", inline=True)
+        embed.add_field(name="🕒 Time", value=time_of_day, inline=True)
+
+        embed.add_field(name="👥 Player Count", value=f"{player_count}/20", inline=False)
+
+        await interaction.followup.send(embed=embed)
+
+    except Exception as e:
+        print(f"Status Error: {e}")
+        await interaction.followup.send("❌ Error: Could not connect to the server.")
+
+class ParentChoiceView(discord.ui.View):
+    def __init__(self, main_view, user): # It must have 'user' here
+        super().__init__(timeout=60)
+        self.main_view = main_view
+        self.user = user
+
+        if user in self.main_view.mothers or user in self.main_view.fathers:
+            leave_button = discord.ui.Button(
+                label="Leave Nest",
+                style=discord.ButtonStyle.red,
+                custom_id="leave_nest"
+            )
+            leave_button.callback = self.leave_nest_callback
+            self.add_item(leave_button)
+
+    async def leave_nest_callback(self, interaction: discord.Interaction):
+        if self.user in self.main_view.mothers:
+            self.main_view.mothers.remove(self.user)
+        if self.user in self.main_view.fathers:
+            self.main_view.fathers.remove(self.user)
+
+        self.main_view.parent_mutations.pop(self.user.id, None)
+
+        await self.main_view.message.edit(embed=self.main_view.create_embed())
+        await interaction.response.edit_message(content="✅ You have left the nest.", view=None)
+        self.stop()
+
+    @discord.ui.button(label="Mother", style=discord.ButtonStyle.danger)
+    async def choose_mother(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user in self.main_view.mothers or interaction.user in self.main_view.fathers:
+            return await interaction.response.edit_message(
+                content="❌ You are already a parent! Use the 'Leave Nest' button if you want to switch roles.",
+                view=self)
+
+        self.main_view.mothers.append(interaction.user)
+        await self.main_view.message.edit(embed=self.main_view.create_embed())
+        await interaction.response.edit_message(content="You joined as Mother!", view=None)
+        self.stop()
+
+    @discord.ui.button(label="Father", style=discord.ButtonStyle.primary)
+    async def choose_father(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user in self.main_view.mothers or interaction.user in self.main_view.fathers:
+            return await interaction.response.edit_message(
+                content="❌ You are already a parent! Use the 'Leave Nest' button if you want to switch roles.",
+                view=self)
+
+        self.main_view.fathers.append(interaction.user)
+        await self.main_view.message.edit(embed=self.main_view.create_embed())
+        await interaction.response.edit_message(content="You joined as Father!", view=None)
+        self.stop()
+
+
+class MutationSelectView(discord.ui.View):
+    def __init__(self, nest_view, user):
+        super().__init__(timeout=60)
+        self.nest_view = nest_view
+        self.user = user
+
+    @discord.ui.select(
+        placeholder="Select Mutation type...",
+        options=[
+            discord.SelectOption(label="None", value="None"),
+            discord.SelectOption(label="Albino", value="albino"),
+            discord.SelectOption(label="Melanism", value="melanism"),
+            discord.SelectOption(label="Piebald", value="piebald"),
+            discord.SelectOption(label="Leucism", value="leucism"),
+            discord.SelectOption(label="Gynandromorphy", value="gynandromorphy"),
+            discord.SelectOption(label="Pseudo-Melanism", value="pseudo-melanism"),
+        ]
+    )
+    async def select_mutation(self, interaction: discord.Interaction, select: discord.ui.Select):
+        mutation_key = select.values[0]  # e.g., "piebald"
+
+        if mutation_key == "None":
+            self.nest_view.parent_mutations.pop(self.user.id, None)
+            await self.nest_view.message.edit(embed=self.nest_view.create_embed())
+            return await interaction.response.edit_message(content="✅ Your mutations have been cleared!", view=None)
+
+        allowed_dinos = MUTATION_ACCESS.get(mutation_key, [])
+
+        if self.nest_view.dino_title not in allowed_dinos:
+            return await interaction.response.edit_message(
+                content=f"❌ **{self.nest_view.dino_title}** cannot have the **{mutation_key.title()}** mutation on this server.",
+                view=None
+            )
+
+        view = MutationStatusView(self.nest_view, self.user, mutation_key.title())
+        await interaction.response.edit_message(
+            content=f"✨ **{self.nest_view.dino_title}** is eligible for **{mutation_key.title()}**.\nDoes this mutation **Display** or is it a **Carrier**?",
+            view=view
+        )
+
+class MutationStatusView(discord.ui.View):
+    def __init__(self, nest_view, user, mutation):
+        super().__init__(timeout=60)
+        self.nest_view = nest_view
+        self.user = user
+        self.mutation = mutation
+
+    async def add_mutation(self, interaction: discord.Interaction, status: str):
+        if self.user.id not in self.nest_view.parent_mutations:
+            self.nest_view.parent_mutations[self.user.id] = []
+
+        user_muts = self.nest_view.parent_mutations[self.user.id]
+
+        if any(m['type'] == self.mutation for m in user_muts):
+            return await interaction.response.edit_message(content=f"❌ You already have **{self.mutation}** listed!",
+                                                           view=None)
+
+        display_count = sum(1 for m in user_muts if m['status'] == 'display')
+        if status == "display" and display_count >= 1:
+            return await interaction.response.edit_message(content="❌ You can only display **one** mutation!",
+                                                           view=None)
+
+        if len(user_muts) >= 4:
+            return await interaction.response.edit_message(
+                content="❌ You have reached the maximum of 4 mutation slots (1 Display + 3 Carriers)!", view=None)
+
+        user_muts.append({"type": self.mutation, "status": status})
+
+        await self.nest_view.message.edit(embed=self.nest_view.create_embed())
+        await interaction.response.edit_message(content=f"✅ Added: **{status.capitalize()}s {self.mutation}**",
+                                                view=None)
+
+    @discord.ui.button(label="Displays", style=discord.ButtonStyle.success)
+    async def display(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.add_mutation(interaction, "display")
+
+    @discord.ui.button(label="Carries", style=discord.ButtonStyle.secondary)
+    async def carry(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.add_mutation(interaction, "carrier")
+
+
+class ManageNestModal(discord.ui.Modal, title='Manage Your Nest'):
+    new_description = discord.ui.TextInput(
+        label='New Description',
+        style=discord.TextStyle.paragraph,
+        placeholder='Enter details about the nest...',
+        required=True,
+        max_length=500,
+    )
+    new_image = discord.ui.TextInput(
+        label='New Image URL (Optional)',
+        placeholder='https://i.imgur.com/example.png',
+        required=False
+    )
+
+    def __init__(self, main_view):
+        super().__init__()
+        self.main_view = main_view
+        # Set current values as default
+        self.new_description.default = self.main_view.user_description
+        self.new_image.default = self.main_view.image_url if self.main_view.image_url else ""
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # Update the main view data
+        self.main_view.user_description = self.new_description.value
+        self.main_view.image_url = self.new_image.value if self.new_image.value.strip() != "" else None
+
+        # Refresh the embed
+        await interaction.response.edit_message(embed=self.main_view.create_embed())
+
+class ManageNestModal(discord.ui.Modal, title='Manage Your Nest'):
+    new_description = discord.ui.TextInput(
+        label='New Description',
+        style=discord.TextStyle.paragraph,
+        placeholder='Enter nest details...',
+        required=True,
+        max_length=500
+    )
+    new_image = discord.ui.TextInput(
+        label='New Image URL (Optional)',
+        placeholder='https://i.imgur.com/example.png',
+        required=False
+    )
+
+    def __init__(self, main_view):
+        super().__init__()
+        self.main_view = main_view
+        self.new_description.default = self.main_view.user_description
+        self.new_image.default = self.main_view.image_url if self.main_view.image_url else ""
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.main_view.user_description = self.new_description.value
+        self.main_view.image_url = self.new_image.value if self.new_image.value.strip() != "" else None
+        await interaction.response.edit_message(embed=self.main_view.create_embed())
+
+
+class NestSetupView(discord.ui.View):
+    def __init__(self, owner, gender, eggs, description, image_url, nesting_item):
+        super().__init__(timeout=1500)
+        self.owner = owner
+        self.gender = gender
+        self.eggs = eggs
+        self.description = description
+        self.image_url = image_url
+        self.nesting_item = nesting_item
+
+        self.selected_diet = None
+        self.selected_dino = None
+
+    @discord.ui.select(
+        placeholder="1. Choose Diet",
+        options=[
+            discord.SelectOption(label="Carnivore", value="carnivore", emoji="🥩"),
+            discord.SelectOption(label="Herbivore", value="herbivore", emoji="🌿"),
+            discord.SelectOption(label="Omnivore", value="omnivore", emoji="🥚")
+        ]
+    )
+    async def select_diet(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if interaction.user.id != self.owner.id:
+            return await interaction.response.send_message("This is not your setup!", ephemeral=True)
+
+        self.selected_diet = select.values[0]
+        species_list = DINO_DIETS.get(self.selected_diet, [])
+        dino_options = [discord.SelectOption(label=d, value=d) for d in species_list]
+
+        dino_select = discord.ui.Select(
+            placeholder=f"2. Choose your {self.selected_diet.capitalize()} species",
+            options=dino_options
+        )
+        dino_select.callback = self.select_dino
+
+        self.clear_items()
+        self.add_item(dino_select)
+
+        await interaction.response.edit_message(
+            content=f"✅ Diet: **{self.selected_diet.capitalize()}**. Pick your species:",
+            view=self
+        )
+
+    async def select_dino(self, interaction: discord.Interaction):
+        if interaction.user.id != self.owner.id:
+            return await interaction.response.send_message("This is not your setup!", ephemeral=True)
+
+        self.selected_dino = interaction.data['values'][0]
+
+        is_multiplied = (self.nesting_item == "Double Nest")
+        if self.nesting_item:
+            consume_inventory_item(self.owner.id, self.nesting_item)
+
+        base_max = MAX_EGGS.get(self.selected_dino.lower(), 3)
+        effective_max = base_max * 2 if is_multiplied else base_max
+        final_eggs = min(self.eggs, effective_max) if self.eggs else effective_max
+
+        public_view = NestView(
+            owner=self.owner,
+            dino=self.selected_dino,
+            gender=self.gender,
+            egg_limit=final_eggs,
+            server_name="Main Server",
+            description=self.description,
+            image_url=self.image_url,
+            multiplier=is_multiplied
+        )
+        public_embed = public_view.create_embed()
+        public_msg = await interaction.channel.send(embed=public_embed, view=public_view)
+
+        public_view.message = public_msg
+
+        await interaction.response.edit_message(content="✨ **Nest Posted!** Join buttons are now active in the channel.", view=None)
+
+
+class NestView(discord.ui.View):
+    def __init__(self, owner, dino, gender, egg_limit, server_name, description, image_url=None, multiplier=False):
+        super().__init__(timeout=1500)
+        self.owner = owner
+        self.dino_raw = dino.lower()
+        self.dino_title = dino.title()
+        self.gender = gender
+        self.egg_limit = egg_limit
+        self.server_name = server_name
+        self.user_description = description
+        self.image_url = image_url
+        self.multiplier = multiplier
+
+        self.mothers = [owner] if gender == "female" else []
+        self.fathers = [owner] if gender == "male" else []
+        self.offspring = []
+        self.parent_mutations = {}
+        self.message = None
+
+    def create_embed(self, expired=False):
+        multiplier_tag = " [⚡ DOUBLE NEST]" if self.multiplier else ""
+        species_max = MAX_EGGS.get(self.dino_raw, 0)
+
+        embed = discord.Embed(
+            title=f"{'❌ Nest Expired' if expired else '🥚 Nesting'}: {self.dino_title}{multiplier_tag}",
+            color=discord.Color.red() if expired else discord.Color.green()
+        )
+
+        header = f"***In the Scorched Season, {self.dino_title} can have {species_max} eggs.***"
+        if self.multiplier:
+            header += "\n✨ **Double Nest Applied: Egg capacity doubled!**"
+
+        embed.description = f"{header}\n\n**Server:** {self.server_name}\n**Note:** {self.user_description}"
+
+        def format_parent(parents):
+            lines = []
+            for p in parents:
+                user_muts = self.parent_mutations.get(p.id, [])
+                if not user_muts:
+                    lines.append(p.mention)
+                    continue
+
+                displays = [m['type'] for m in user_muts if m['status'] == 'display']
+                carriers = [m['type'] for m in user_muts if m['status'] == 'carrier']
+
+                status_parts = []
+                if displays: status_parts.append(f"Display: {', '.join(displays)}")
+                if carriers: status_parts.append(f"Carrier: {', '.join(carriers)}")
+
+                details = " | ".join(status_parts)
+                lines.append(f"{p.mention} ({details})")
+            return "\n".join(lines) if lines else "🪹 *Waiting...*"
+
+        embed.add_field(name="Mother(s)", value=format_parent(self.mothers), inline=True)
+        embed.add_field(name="Father(s)", value=format_parent(self.fathers), inline=True)
+
+        egg_visual = ("🐣 " * len(self.offspring)) + ("🥚 " * (self.egg_limit - len(self.offspring)))
+        embed.add_field(
+            name=f"Offspring ({len(self.offspring)}/{self.egg_limit})",
+            value=f"{egg_visual}\n" + ("\n".join([o.mention for o in self.offspring]) or "No babies yet."),
+            inline=False
+        )
+
+        if self.image_url:
+            embed.set_image(url=self.image_url)
+        return embed
+
+    @discord.ui.button(label="Parent", style=discord.ButtonStyle.blurple, row=0)
+    async def parent_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("Select your role:", view=ParentChoiceView(self, interaction.user),
+                                                ephemeral=True)
+
+    @discord.ui.button(label="Egg", style=discord.ButtonStyle.green, row=0)
+    async def egg_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if (len(self.mothers) + len(self.fathers)) < 2:
+            return await interaction.response.send_message("Needs 2 parents first!", ephemeral=True)
+        if len(self.offspring) >= self.egg_limit:
+            return await interaction.response.send_message("Nest is full!", ephemeral=True)
+        self.offspring.append(interaction.user)
+        await interaction.response.edit_message(embed=self.create_embed())
+
+    @discord.ui.button(label="Mutation", style=discord.ButtonStyle.blurple, row=0)
+    async def mutation_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user not in self.mothers and interaction.user not in self.fathers:
+            return await interaction.response.send_message("Only parents can set mutations!", ephemeral=True)
+        await interaction.response.send_message("Select mutation:", view=MutationSelectView(self, interaction.user),
+                                                ephemeral=True)
+
+    @discord.ui.button(label="Abandon", style=discord.ButtonStyle.red, row=0)
+    async def abandon_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.owner:
+            return await interaction.response.send_message("Only the owner can abandon this!", ephemeral=True)
+        self.stop()
+        for item in self.children: item.disabled = True
+        await interaction.response.edit_message(embed=self.create_embed(expired=True), view=self)
+
+    @discord.ui.button(label="Manage Nest", style=discord.ButtonStyle.gray, row=1)
+    async def manage_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.owner:
+            return await interaction.response.send_message("Only the owner can manage this!", ephemeral=True)
+        await interaction.response.send_modal(ManageNestModal(self))
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+
+        if self.message:
+            try:
+                # We edit BOTH the embed (to show the red 'Expired' state)
+                # and the view (to show the greyed out buttons)
+                await self.message.edit(
+                    embed=self.create_embed(expired=True),
+                    view=self
+                )
+            except discord.HTTPException:
+                # This prevents the bot from crashing if the message was deleted
+                pass
+
+class EditDescriptionModal(discord.ui.Modal, title="Edit Nest Description"):
+    new_desc = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph, placeholder="Enter new nest details...", max_length=200)
+
+    def __init__(self, nest_view):
+        super().__init__()
+        self.nest_view = nest_view
+        self.new_desc.default = nest_view.user_description
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.nest_view.user_description = self.new_desc.value
+        await interaction.response.edit_message(embed=self.nest_view.create_embed())
+async def dino_autocomplete(interaction: discord.Interaction, current: str) -> typing.List[app_commands.Choice[str]]:
+    return [
+        app_commands.Choice(name=dino, value=dino.lower())
+        for dino in DINO_LIST if current.lower() in dino.lower()
+    ][:25]
+
+
+async def nesting_item_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+    user_id = str(interaction.user.id)
+    economy = load_economy()
+    user_data = economy.get(user_id, {})
+    inventory = user_data.get("inventory", [])
+
+    choices = []
+    for item_name in NESTING_ITEMS:
+        item_count = inventory.count(item_name)
+        if item_count > 0 and current.lower() in item_name.lower():
+            choices.append(app_commands.Choice(
+                name=f"✨ Use {item_name} ({item_count} owned)",
+                value=item_name
+            ))
+    return choices[:25]  # Limit to 25 for Discord constraints
+
+
+@bot.tree.command(name="nest", description="Start a nesting post")
+@app_commands.choices(gender=[
+    app_commands.Choice(name="Male", value="male"),
+    app_commands.Choice(name="Female", value="female")
+])
+async def nest(
+    interaction: discord.Interaction,
+    gender: app_commands.Choice[str],
+    eggs: typing.Optional[int] = None,
+    description: str = "No description provided.",
+    image_url: typing.Optional[str] = None,
+    nesting_item: typing.Optional[typing.Literal["Double Nest"]] = None
+):
+    view = NestSetupView(interaction.user, gender.value, eggs, description, image_url, nesting_item)
+    await interaction.response.send_message("### 🥚 Nest Setup", view=view, ephemeral=True)
+
+def consume_inventory_item(discord_id, item_name):
+    """
+    Standardized to check the economy file.
+    Call this if you need to remove items outside of the slash command.
+    """
+    economy = load_economy()
+    uid = str(discord_id)
+    if uid in economy and "inventory" in economy[uid]:
+        items = economy[uid]["inventory"]
+        for i, item in enumerate(items):
+            # Supports both string lists and dict lists
+            current_name = item if isinstance(item, str) else item.get("name", "")
+            if current_name.lower() == item_name.lower():
+                items.pop(i)
+                save_economy(economy)
+                return True
+    return False
+
+
+@bot.tree.command(name="link", description="Step 1: Get a code to link your account")
+async def link_request(interaction: discord.Interaction):
+    code = str(random.randint(1000, 9999))
+    global pending_links
+    pending_links[code] = interaction.user.id
+
+    embed = discord.Embed(
+        title="🔗 Linking Process Started",
+        description=f"Your secret code is: **{code}**\n\n**Next Steps:**\n1. Log into the game server.\n2. Type exactly `!link {code}` in Global Chat.\n3. The bot will automatically verify you!",
+        color=discord.Color.blue()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+async def scan_game_chat():
+    await bot.wait_until_ready()
+    print("📡 RCON Chat Scanner Started...")
+
+    while not bot.is_closed():
+        try:
+            logs = await rcon("getchat", host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+            if logs:
+                login_matches = re.findall(r"\((\d{3}-\d{3}-\d{3})\) logged in", logs)
+                for aid in login_matches:
+                    elder_session_used[aid] = False
+                    print(f"🔓 Session Reset for {aid} (Logged In)")
+
+                logout_matches = re.findall(r"\((\d{3}-\d{3}-\d{3})\) logged out", logs)
+                for aid in logout_matches:
+                    elder_session_used[aid] = True
+                    print(f"🔒 Session Locked for {aid} (Logged Out)")
+
+                for match in re.finditer(r"\((\d{3}-\d{3}-\d{3})\): !elder (\d+)", logs):
+                    player_aid = match.group(1)
+                    used_code = match.group(2)
+
+                    if used_code not in pending_elders:
+                        continue
+
+                    data = pending_elders[used_code]
+                    now = datetime.datetime.now().timestamp()
+
+                    if elder_session_used.get(player_aid, False):
+                        await rcon(
+                            f'whisper "{player_aid}" ⚠️ You are already an Elder for this life. Stats cannot be stacked.',
+                            host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+                        continue
+
+                    if now > data['expiry']:
+                        await rcon(f'whisper "{player_aid}" ❌ This code has expired.',
+                                   host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+                        continue
+
+                    if data['fate'] == "die":
+                        await rcon(f'setattr "{player_aid}" health 0', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+                        del pending_elders[used_code]  # Remove code after death
+                    else:
+                        await rcon(f'modattr "{alderon_id}" CombatWeight {data["cw"]}', host=RCON_IP, port=RCON_PORT,
+                                   passwd=RCON_PASS)
+                        await rcon(f'setattr "{alderon_id}" SprintingSpeedMultiplier {data["speed"]}', host=RCON_IP,
+                                   port=RCON_PORT, passwd=RCON_PASS)
+
+                        elder_session_used[alderon_id] = True
+                        active_elder_tokens[alderon_id] = {
+                            "cw": data['cw'],
+                            "speed": data['speed'],
+                            "token": current_token,
+                            "expiry": data['expiry']
+                        }
+
+                        elders_db = load_elders()
+                        elders_db[alderon_id] = {"cw": data['cw'], "speed": data['speed'], "expiry": data['expiry']}
+                        save_elders(elders_db)
+
+                        if discord_user_id:
+                            try:
+                                user = await bot.fetch_user(int(discord_user_id))
+                                await user.send(
+                                    f"🎊 **Congratulations!! Elder Status Achieved!**\n\n"
+                                    f"Use `/elder_reapply token:{current_token}` in Discord to reapply Elder Status after your next relog."
+                                )
+                                print(f"🎲 Generated UNIQUE token {current_token} for {alderon_id}")
+                            except Exception as e:
+                                print(f"❌ DM failed: {e}")
+
+                        await rcon(f'whisper "{alderon_id}" Elder status achieved!', host=RCON_IP, port=RCON_PORT,
+                                   passwd=RCON_PASS)
+
+                        if code in pending_elders:
+                            del pending_elders[code]
+
+        except Exception as e:
+            print(f"RCON Scanner Error: {e}")
+
+        await asyncio.sleep(12)
+
+@bot.tree.command(name="admin_link", description="Admin only: Manually link a user")
+@app_commands.checks.has_permissions(administrator=True)
+async def admin_link(interaction: discord.Interaction, member: discord.Member, alderon_id: str):
+    save_link(member.id, alderon_id)
+    await interaction.response.send_message(f"✅ Manually linked {member.mention} to `{alderon_id}`", ephemeral=True)
+
+async def run_relative_unstuck(player_target):
+    """Teleports the player to a static safe zone since getplayerlocation is disabled."""
+    try:
+        print(f"📡 Attempting Static Unstuck for: {player_target}")
+
+        safe_x, safe_y, safe_z = 0, 0, 25000
+
+        teleport_cmd = f'teleport "{player_target}" (X={safe_x},Y={safe_y},Z={safe_z})'
+
+        response = await rcon(teleport_cmd, host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+        print(f"🛰️ Teleport sent. Server response: {response}")
+
+        await rcon(f'whisper "{player_target}" Unstuck! Teleporting you to the safe zone.', host=RCON_IP,
+                   port=RCON_PORT, passwd=RCON_PASS)
+
+    except Exception as e:
+        print(f"❌ RCON Unstuck Error: {e}")
+
+async def handle_time_whisper(target):
+    try:
+        raw_response = await rcon("ServerInfo", host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+        time_digits = ""
+
+        parts = raw_response.split("/")
+
+        for part in parts:
+            if "TimeOfDay" in part:
+                # Extract just the digits from this specific part
+                time_digits = "".join(filter(str.isdigit, part))
+                break
+
+        if time_digits:
+            if len(time_digits) == 3:
+                time_digits = "0" + time_digits
+
+            time_digits = time_digits[:4]  # Take only the first 4 digits
+
+            hours = int(time_digits[:2])
+            minutes = int(time_digits[2:4])
+
+            suffix = "AM" if hours < 12 else "PM"
+            display_hour = hours % 12
+            if display_hour == 0: display_hour = 12
+
+            readable_time = f"{display_hour}:{minutes:02d} {suffix}"
+
+            await rcon(f'whisper "{target}" 🕒 Server Time: {readable_time}', host=RCON_IP, port=RCON_PORT,
+                       passwd=RCON_PASS)
+            print(f"✅ Success! Extracted {time_digits} -> {readable_time}")
+        else:
+            print(f"⚠️ Failed to find 'TimeOfDay' in the parts: {parts}")
+            await rcon(f'whisper "{target}" ❌ Time data not found in server info.', host=RCON_IP, port=RCON_PORT,
+                       passwd=RCON_PASS)
+
+    except Exception as e:
+        print(f"❌ Error in handle_time_whisper: {e}")
+
+
+def check_farming_cooldown(user_id):
+    history_file = 'farming_history.json'
+    if not os.path.exists(history_file):
+        return True, ""
+
+    with open(history_file, 'r') as f:
+        try:
+            history = json.load(f)
+        except:
+            history = {}
+
+    last_farm = history.get(str(user_id), 0)
+    now = time.time()
+
+    if now - last_farm < 3600:
+        wait_time = int((3600 - (now - last_farm)) // 60)
+        return False, f"⏳ You must wait {wait_time} more minutes before farming again."
+
+    return True, ""
+
+
+def update_farming_history(user_id):
+    history_file = 'farming_history.json'
+    history = {}
+    if os.path.exists(history_file):
+        with open(history_file, 'r') as f:
+            try:
+                history = json.load(f)
+            except:
+                history = {}
+
+    history[str(user_id)] = time.time()
+    with open(history_file, 'w') as f:
+        json.dump(history, f, indent=4)
+
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+
+    player_msg = message.content
+    player_msg_lower = player_msg.lower()
+
+    player_name = None
+    alderon_id = None
+
+    if message.channel.id in [BRIDGE_CHANNEL_ID, LOG_CHANNEL_ID, CHAT_CHANNEL_ID]:
+        import re  # Ensure re is available
+
+        title = ""
+        description = ""
+        author_name = ""
+
+        if message.embeds:
+            embed = message.embeds[0]
+            title = embed.title or ""
+            description = embed.description or ""
+            if embed.author:
+                author_name = embed.author.name or ""
+
+        full_text = f"{title} {description} {author_name} {message.content}"
+        clean_text = full_text.replace("**", "")
+
+        if "CurrentMarks: 0" in clean_text and "DinosaurGrowth: 0.25" in clean_text:
+            id_match = re.search(r'(\d{3}-\d{3}-\d{3})', clean_text)
+
+            if id_match:
+                found_id = id_match.group(1)
+
+                try:
+                    # We send the command directly to the game server console
+                    await rcon(f"setattr {found_id} growth 0", host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+                    log_channel = bot.get_channel(LOG_CHANNEL_ID)
+                    if log_channel:
+                        await log_channel.send(
+                            f"🛠️ **Auto-Correction:** Reset growth to 0 for Alderon ID: `{found_id}` (Fresh Spawn detected).")
+
+                    print(f"✅ RCON Command Sent: setattr {found_id} growth 0")
+                except Exception as e:
+                    print(f"❌ RCON Growth Reset Failed: {e}")
+            else:
+                print(f"⚠️ Fresh spawn detected, but couldn't parse ID from log.")
+
+        if "playerrespawn" in full_text.lower():
+            # Flexible regex: captures the data regardless of bolding or extra spaces
+            aid_match = re.search(r"playeralderonid.*?([\d-]+)", full_text, re.IGNORECASE)
+            dino_match = re.search(r"dinosaurtype.*?([\w_-]+)", full_text, re.IGNORECASE)
+            char_match = re.search(r"charactername.*?([\w\s-]+)", full_text, re.IGNORECASE)
+
+            if aid_match and dino_match and char_match:
+                aid = aid_match.group(1).strip()
+                dino_type = dino_match.group(1).strip()
+                char_name = char_match.group(1).strip()
+
+                log_channel = bot.get_channel(LOG_CHANNEL_ID)
+                if log_channel:
+                    await log_channel.send(f"📥 **Spawn Detected:** `{char_name}` ({dino_type}) [AID: {aid}]")
+
+                async def delayed_heal(target_id):
+                    await asyncio.sleep(3) # Wait for player to fully load
+                    try:
+                        await rcon(f'setattr "{target_id}" leghealrate .75', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+                        print(f"🩹 Applied leghealrate .75 to {target_id}")
+                    except Exception as e:
+                        print(f"❌ RCON LegHeal Failed: {e}")
+
+                asyncio.create_task(delayed_heal(aid))
+
+        if "playerleave" in full_text.lower():
+            aid_match = re.search(r"(\d{3}-\d{3}-\d{3})", full_text)
+            if aid_match:
+                aid = aid_match.group(1)
+                elder_session_used[aid] = False
+                print(f"🔓 Detected Logout in Log Channel: {aid} unlocked.")
+            return
+
+        player_name = "Unknown"
+        player_msg = ""
+        alderon_id = None
+
+        lines = description.split("\n")
+        for line in lines:
+            clean_line = line.replace("*", "").strip()
+            if "PlayerName:" in clean_line:
+                player_name = clean_line.split("PlayerName:")[1].strip()
+            elif "Message:" in clean_line:
+                player_msg = clean_line.split("Message:")[1].strip()
+            elif "AlderonId:" in clean_line:
+                alderon_id = clean_line.split("AlderonId:")[1].strip()
+
+        try:
+            with open("player_logs.txt", "a", encoding="utf-8") as f:
+                real_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                f.write(f"[{real_time}] ID: {alderon_id} | Name: {player_name} | Msg: {player_msg}\n")
+        except Exception as e:
+            print(f"❌ Failed to write to log file: {e}")
+
+        if "!h" in player_msg.lower():
+            try:
+                print(f"DEBUG: !h command triggered by {player_name}")
+
+                h_raw = await rcon(f'getattr "{player_name}" Hunger', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+                mh_raw = await rcon(f'getattr "{player_name}" MaxHunger', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+                print(f"DEBUG: Server Response -> Hunger: {h_raw} | Max: {mh_raw}")
+
+                h_numbers = re.findall(r"[-+]?\d*\.\d+|\d+", str(h_raw))
+                mh_numbers = re.findall(r"[-+]?\d*\.\d+|\d+", str(mh_raw))
+
+                if h_numbers and mh_numbers:
+                    h_val = float(h_numbers[-1])
+                    mh_val = float(mh_numbers[-1])
+
+                    percent = (h_val / mh_val) * 100 if mh_val > 0 else 0
+
+                    await message.channel.send(
+                        f"🍖 **{player_name}'s Stats**\n"
+                        f"**Hunger:** {h_val:.1f} / {mh_val:.1f} ({percent:.1f}%)"
+                    )
+                    print(f"✅ Successfully sent !h for {player_name}")
+                else:
+                    print(f"❌ Failed to find numbers in RCON response. Raw: {h_raw}")
+                    await message.channel.send(f"⚠️ Could not parse stats. Server said: `{h_raw}`")
+
+            except Exception as e:
+                print(f"❌ CRITICAL ERROR in !h: {e}")
+            return
+
+        player_msg_lower = player_msg.lower()
+        if "!elder" in player_msg_lower and "!elder_reapply" not in player_msg_lower:
+            if elder_session_used.get(alderon_id, False):
+                await rcon(f'whisper "{alderon_id}" Session locked. Relog to menu first!', host=RCON_IP, port=RCON_PORT,
+                           passwd=RCON_PASS)
+                return
+
+            potential_codes = re.findall(r"\d{6}", player_msg)
+            if not potential_codes:
+                return
+
+            code = potential_codes[0]
+            if code in pending_elders:
+                data = pending_elders[code]
+                player_info = current_player_dino.get(alderon_id)
+
+                if not player_info:
+                    await rcon(f'whisper "{alderon_id}" Error: Bot lost track of dino. Move or relog.', host=RCON_IP,
+                               port=RCON_PORT, passwd=RCON_PASS)
+                    return
+
+                current_char = player_info.get('char_name', "Unknown Character")
+                current_dino_type = player_info.get('type', "Unknown Dino")
+
+                if data['fate'] == "die":
+                    await rcon(f'setattr "{alderon_id}" health 0', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+                    await rcon(f'whisper "{alderon_id}" The transition was too much. You perished.', host=RCON_IP,
+                               port=RCON_PORT, passwd=RCON_PASS)
+                    del pending_elders[code]
+                    return
+
+                session_token = str(random.randint(100000, 999999))
+                await rcon(f'modattr "{alderon_id}" CombatWeight {data["cw"]}', host=RCON_IP, port=RCON_PORT,
+                           passwd=RCON_PASS)
+                await rcon(f'setattr "{alderon_id}" SprintingSpeedMultiplier {data["speed"]}', host=RCON_IP,
+                           port=RCON_PORT, passwd=RCON_PASS)
+
+                elders_db = load_elders()
+                if alderon_id not in elders_db: elders_db[alderon_id] = []
+                elders_db[alderon_id].append({
+                    "cw": data['cw'], "speed": data['speed'], "token": session_token,
+                    "expiry": data['expiry'], "dino_type": data['dino_type'], "char_name": current_char.lower()
+                })
+                save_elders(elders_db)
+
+                await rcon(f'whisper "{alderon_id}" Congratulations! Elder status achieved.', host=RCON_IP,
+                           port=RCON_PORT, passwd=RCON_PASS)
+                del pending_elders[code]
+                elder_session_used[alderon_id] = True
+            return
+
+        if "!time" in player_msg_lower:
+            target = alderon_id if alderon_id else player_name
+            await handle_time_whisper(target)
+            return
+        elif "!unstuck" in player_msg_lower:
+            target = alderon_id if alderon_id else player_name
+            await run_relative_unstuck(target)
+            return
+
+        if "!farm" in player_msg_lower:
+            # 1. Identify the linked Discord account
+            discord_id = next((k for k, v in discord_to_alderon.items() if v == alderon_id), None)
+
+            if not discord_id:
+                await rcon(f'whisper "{alderon_id}" Your account is not linked! Use /link in Discord.', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+                return
+
+            can_farm, error_msg = check_farming_cooldown(discord_id)
+            if not can_farm:
+                await rcon(f'whisper "{alderon_id}" {error_msg}', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+                return
+
+            economy = load_economy()
+            user_id_str = str(discord_id)
+
+            if user_id_str not in economy:
+                economy[user_id_str] = {"balance": 0}
+
+            economy[user_id_str]["balance"] += 25
+
+            save_economy(economy)
+            update_farming_history(discord_id)
+
+            new_balance = economy[user_id_str]["balance"]
+            await rcon(f'whisper "{alderon_id}" Success! +25 tokens added. Bank Total: {new_balance}', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+            await message.channel.send(f"🚜 **{player_name}** has farmed 25 tokens! (New Balance: {new_balance})")
+            return
+
+        elif "!link" in player_msg_lower:
+            parts = player_msg.split()
+            if len(parts) > 1:
+                code = parts[1]
+                if code in pending_links:
+                    discord_id = pending_links.pop(code)
+                    save_link(discord_id, alderon_id)
+                    discord_to_alderon[str(discord_id)] = alderon_id
+
+                    await rcon(f'whisper "{alderon_id}" Account successfully linked!', host=RCON_IP, port=RCON_PORT,
+                               passwd=RCON_PASS)
+                    await message.channel.send(
+                        f"✅ <@{discord_id}> has successfully linked to Alderon ID: `{alderon_id}`")
+                else:
+                    await rcon(f'whisper "{alderon_id}" Invalid or expired link code.', host=RCON_IP, port=RCON_PORT,
+                               passwd=RCON_PASS)
+            return
+
+        elif "!pause" in player_msg_lower:
+            # We prioritize the Alderon ID (aid) for RCON accuracy
+            player_info = current_player_dino.get(alderon_id)
+            target = alderon_id if alderon_id and alderon_id != "None" else player_name
+            try:
+                await rcon(f'setattr "{alderon_id}" growthpersecond 0.0', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+                await rcon(f'whisper "{alderon_id}" Growth has been paused.', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+                print(f"⏸️ Growth paused for {target}")
+                await message.channel.send(f"⏸️ **{player_name}** has paused their growth.")
+            except Exception as e:
+                print(f"❌ Error in !pause: {e}")
+            return
+
+        elif "!unpause" in player_msg_lower:
+            # We prioritize the Alderon ID (aid) for RCON accuracy
+            player_info = current_player_dino.get(alderon_id)
+            target = alderon_id if alderon_id and alderon_id != "None" else player_name
+            try:
+
+                await rcon(f'setattr "{alderon_id}" growthpersecond 1.0', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+                await rcon(f'whisper "{alderon_id}" Growth has been unpaused.', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+                print(f"⏸️ Growth unpaused for {target}")
+                await message.channel.send(f"⏸️ **{player_name}** has paused their growth.")
+            except Exception as e:
+                print(f"❌ Error in !pause: {e}")
+            return
+
+        elif "!torvo" in player_msg_lower:
+            target = alderon_id if (alderon_id and alderon_id != "None") else player_name
+            if not target: return
+
+            try:
+                response = await rcon(f'getattr "{target}" growth', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+                growth_match = re.search(r"(\d+\.\d+)", response)
+
+                if growth_match:
+                    # Rounding to 3 places ensures 0.749123 becomes 0.749
+                    current_growth = round(float(growth_match.group(1)), 3)
+                    print(f"DEBUG: {target} rounded growth is {current_growth}")
+
+                    if current_growth == 0.749:
+                        # Success: Force to Sub-Adult (0.75)
+                        # This moves them past the Adolescent phase into the 'Paused' phase
+                        await rcon(f'setattr "{target}" growth 0.75', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+                        await rcon(f'whisper "{target}" Verification success! You are now a Sub-Adult.', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+                        await message.channel.send(f"🦕 **{player_name}** hit exactly 0.749 and evolved to Sub-Adult!")
+                    else:
+                        # Failure: Not exactly at the threshold
+                        # We tell them exactly what they are at so they know how close they are
+                        await rcon(f'whisper "{target}" Failed. Growth must be 0.749. You are at {current_growth}.', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+                else:
+                    await rcon(f'whisper "{target}" Could not read growth data. Please try again.', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+            except Exception as e:
+                print(f"❌ Error in !torvo: {e}")
+            return
+
+@bot.tree.command(name="player_history", description="Admin Only: Search logs for a specific Alderon ID")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(aid="The Alderon ID to search for (e.g. 123-456-789)")
+async def player_history(interaction: discord.Interaction, aid: str):
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        # We request the recent log buffer from the server
+        # This pulls the last ~100-200 lines of console activity
+        raw_logs = await rcon("getlog", host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+        if not raw_logs or "Command not found" in raw_logs:
+            await interaction.followup.send(
+                "❌ Your server host does not support fetching logs via RCON. "
+                "You must check your game server's dashboard or .log files manually.",
+                ephemeral=True
+            )
+            return
+
+        log_lines = raw_logs.split('\n')
+        found_entries = [line for line in log_lines if aid in line]
+
+        if not found_entries:
+            await interaction.followup.send(f"No recent logs found for ID: `{aid}`", ephemeral=True)
+            return
+
+        formatted_logs = "\n".join(found_entries[-10:])
+
+        embed = discord.Embed(
+            title=f"📋 Activity Log for {aid}",
+            description=f"```\n{formatted_logs}\n```",
+            color=discord.Color.orange()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    except Exception as e:
+        await interaction.followup.send(f"An error occurred: {e}", ephemeral=True)
+
+
+class ShopSelect(discord.ui.Select):
+    def __init__(self):
+        options = []
+        for name, data in SHOP_ITEMS.items():
+            price_tag = f"Cost: {data['cost']} | "
+
+            remaining_space = 100 - len(price_tag) - 3
+
+            desc = data['description']
+            if len(desc) > remaining_space:
+                desc = desc[:remaining_space].strip() + ".."
+
+            options.append(
+                discord.SelectOption(
+                    label=name,
+                    description=f"{price_tag}{desc}",
+                    emoji=data['emoji']
+                )
+            )
+        super().__init__(placeholder="Select an item to purchase...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        item_name = self.values[0]
+        item_data = SHOP_ITEMS[item_name]
+        cost = item_data['cost']
+
+        economy = load_economy()
+        user_id = str(interaction.user.id)
+
+        user_data = economy.get(user_id, {"balance": 0, "last_farm": 0, "inventory": []})
+
+        if user_data["balance"] < cost:
+            return await interaction.response.send_message(
+                f"❌ You need {cost} tokens! Your balance: {user_data['balance']}",
+                ephemeral=True
+            )
+
+        user_data["balance"] -= cost
+        if "inventory" not in user_data:
+            user_data["inventory"] = []
+        user_data["inventory"].append(item_name)  # 'item_name' should match the key in SHOP_ITEMS
+
+        economy[user_id] = user_data
+        save_economy(economy)
+
+        await interaction.response.send_message(
+            f"✅ Purchased **{item_name}**! Remaining tokens: {user_data['balance']}",
+            ephemeral=True
+        )
+
+
+class ShopView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.add_item(ShopSelect())
+
+
+class ShopPagination(discord.ui.View):
+    def __init__(self, items, user_balance):
+        super().__init__(timeout=60)
+        self.all_items_dict = items  # Keep the original dict for buying
+        self.items_list = list(items.items())
+        self.user_balance = user_balance
+        self.items_per_page = 4
+        self.current_page = 0
+        self.total_pages = math.ceil(len(self.items_list) / self.items_per_page)
+
+        self.add_item(ShopDropdown(self.items_list, self.items_per_page, self.current_page))
+
+    def create_embed(self):
+        embed = discord.Embed(
+            title="🛒 The Dino Shop",
+            description=f"Your Balance: **{self.user_balance:,}** tokens\n",
+            color=discord.Color.blue()
+        )
+
+        start = self.current_page * self.items_per_page
+        end = start + self.items_per_page
+        page_items = self.items_list[start:end]
+
+        for name, data in page_items:
+            emoji = data.get('emoji', '📦')
+            desc = data.get('description', 'No description available.').strip()
+            stock = data.get('stock', '∞')
+            cost = data.get('cost', 0)
+
+            field_value = (
+                f"{desc}\n_ _\n"
+                f"**Stock:** {stock}\n"
+                f"**Purchase:** {cost:,} tokens.\n"
+                f"───────────────────\n\n_ _"
+            )
+
+            embed.add_field(name=f"{emoji} {name}", value=field_value, inline=False)
+
+        embed.set_footer(text=f"calamitybot | All sales are final. | Page {self.current_page + 1}/{self.total_pages}")
+        return embed
+
+    @discord.ui.button(label="⬅️ Previous", style=discord.ButtonStyle.gray, row=1)
+    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_view()
+            await interaction.response.edit_message(embed=self.create_embed(), view=self)
+
+    @discord.ui.button(label="Next ➡️", style=discord.ButtonStyle.gray, row=1)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.update_view()
+            await interaction.response.edit_message(embed=self.create_embed(), view=self)
+
+    def update_view(self):
+        self.clear_items()
+        self.add_item(ShopDropdown(self.items_list, self.items_per_page, self.current_page))
+        # Re-add buttons
+        self.add_item(self.previous_button)
+        self.add_item(self.next_button)
+
+
+class ShopDropdown(discord.ui.Select):
+    def __init__(self, items_list, per_page, current_page):
+        start = current_page * per_page
+        end = start + per_page
+        options = []
+
+        for name, data in items_list[start:end]:
+            options.append(discord.SelectOption(
+                label=name,
+                description=f"Cost: {data.get('cost', 0)} tokens",
+                emoji=data.get('emoji', '📦')
+            ))
+
+        super().__init__(placeholder="Select an item to purchase...", min_values=1, max_values=1, options=options,
+                         row=0)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_item = self.values[0]
+        await interaction.response.send_message(
+            f"You selected **{selected_item}**. Please use `/buy item:{selected_item}` to confirm!", ephemeral=True)
+
+
+@bot.tree.command(name="shop", description="View available items in the shop")
+async def shop(interaction: discord.Interaction):
+    economy = load_economy()
+    user_id = str(interaction.user.id)
+    user_data = economy.get(user_id, {"balance": 0})
+
+    if not SHOP_ITEMS:
+        await interaction.response.send_message("The shop is currently empty.", ephemeral=True)
+        return
+
+    view = ShopPagination(SHOP_ITEMS, user_data["balance"])
+    await interaction.response.send_message(embed=view.create_embed(), view=view)
+
+
+@bot.tree.command(name="inventory", description="Check token balance and purchased perks")
+@app_commands.describe(user="The user whose inventory you want to check")
+async def inventory(interaction: discord.Interaction, user: discord.Member = None):
+    target_user = user or interaction.user
+
+    economy = load_economy()
+    user_id = str(target_user.id)
+
+    user_data = economy.get(user_id, {"balance": 0, "inventory": []})
+    balance = user_data.get("balance", 0)
+    items = user_data.get("inventory", [])
+
+    embed = discord.Embed(
+        title=f"🎒 {target_user.display_name}'s Inventory",
+        color=discord.Color.blue()
+    )
+
+    embed.add_field(name="🪙 Token Balance", value=f"**{balance:,}** tokens", inline=False)
+
+    if items:
+        item_counts = {}
+        for item in items:
+            item_counts[item] = item_counts.get(item, 0) + 1
+
+        item_list_str = ""
+        for item_name, count in item_counts.items():
+            # Looks up emoji from your SHOP_ITEMS list
+            emoji = SHOP_ITEMS.get(item_name, {}).get("emoji", "📦")
+            item_list_str += f"{emoji} **{item_name}** x{count}\n"
+
+        embed.add_field(name="✨ Active Perks", value=item_list_str, inline=False)
+    else:
+        embed.add_field(name="✨ Active Perks", value="*No perks owned yet. Visit the `/shop` to browse!*", inline=False)
+
+    embed.set_footer(text="calamitybot | Items like 'Custom Den' require a staff ticket to activate.")
+
+    await interaction.response.send_message(embed=embed)
+
+
+async def shop_item_autocomplete(
+        interaction: discord.Interaction,
+        current: str,
+) -> list[app_commands.Choice[str]]:
+    # Get the value currently in the 'gift_type' box
+    gift_type = interaction.namespace.gift_type
+
+    # If Tokens is selected, return an empty list.
+    # This tells Discord "There are no suggestions, let the user type manually."
+    if gift_type == "tokens":
+        return []
+
+    # If Items is selected, fetch the user's specific inventory
+    economy = load_economy()
+    user_id = str(interaction.user.id)
+    user_data = economy.get(user_id, {})
+    user_inventory = user_data.get("inventory", [])
+
+    # Filter by what the user is typing
+    unique_items = list(set(user_inventory))
+
+    return [
+        app_commands.Choice(name=item, value=item)
+        for item in unique_items if current.lower() in item.lower()
+    ][:25]
+
+
+# --- 2. THE GIFT COMMAND ---
+@bot.tree.command(name="gift", description="Gift tokens or items to another user")
+@app_commands.describe(
+    receiver="The user receiving the gift",
+    gift_type="Tokens or Item?",
+    selection="PICK ITEM HERE (Leave blank if gifting tokens)",
+    quantity="Number of tokens OR number of items to gift"
+)
+@app_commands.choices(gift_type=[
+    app_commands.Choice(name="Tokens", value="tokens"),
+    app_commands.Choice(name="Item", value="item")
+])
+@app_commands.autocomplete(selection=shop_item_autocomplete)
+async def gift(
+        interaction: discord.Interaction,
+        receiver: discord.Member,
+        gift_type: str,
+        selection: str = None,
+        quantity: int = 1
+):
+    if receiver.id == interaction.user.id:
+        await interaction.response.send_message("❌ You cannot gift yourself!", ephemeral=True)
+        return
+
+    if quantity <= 0:
+        await interaction.response.send_message("⚠️ Quantity must be at least 1.", ephemeral=True)
+        return
+
+    economy = load_economy()
+    sender_id = str(interaction.user.id)
+    receiver_id = str(receiver.id)
+
+    if receiver_id not in economy:
+        economy[receiver_id] = {"balance": 0, "inventory": [], "last_farm": 0}
+
+    if gift_type == "tokens":
+        # In this mode, 'quantity' is the number of tokens. 'selection' is ignored.
+        total_gift = quantity
+        sender_balance = economy.get(sender_id, {}).get("balance", 0)
+
+        if sender_balance < total_gift:
+            await interaction.response.send_message(
+                f"❌ You only have **{sender_balance:,}** tokens. You tried to gift **{total_gift:,}**.",
+                ephemeral=True
+            )
+            return
+
+        economy[sender_id]["balance"] -= total_gift
+        economy[receiver_id]["balance"] += total_gift
+
+        save_economy(economy)
+        await interaction.response.send_message(
+            f"🎁 {interaction.user.mention} gifted **{total_gift:,} tokens** to {receiver.mention}!")
+
+    else:
+        # Check if they actually picked an item
+        if not selection:
+            await interaction.response.send_message("❌ You must select an item from the list to gift an item!",
+                                                    ephemeral=True)
+            return
+
+        sender_inv = economy.get(sender_id, {}).get("inventory", [])
+        matching_items = [i for i in sender_inv if i.lower() == selection.lower()]
+
+        if len(matching_items) < quantity:
+            await interaction.response.send_message(
+                f"❌ You only have **{len(matching_items)}** of that item. You tried to gift **{quantity}**.",
+                ephemeral=True
+            )
+            return
+
+        actual_item_name = matching_items[0]
+        for _ in range(quantity):
+            sender_inv.remove(actual_item_name)
+            economy[receiver_id].setdefault("inventory", []).append(actual_item_name)
+
+        save_economy(economy)
+        emoji = SHOP_ITEMS.get(actual_item_name, {}).get("emoji", "📦")
+        await interaction.response.send_message(
+            f"🎁 {interaction.user.mention} gifted **{quantity}x {emoji} {actual_item_name}** to {receiver.mention}!"
+        )
+
+@bot.tree.command(name="manage_inventory", description="Admin: Adjust a user's items or tokens")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.choices(action=[
+    app_commands.Choice(name="Add Item", value="add_item"),
+    app_commands.Choice(name="Remove Item", value="remove_item"),
+    app_commands.Choice(name="Set Tokens", value="set_tokens"),
+    app_commands.Choice(name="Add Tokens", value="add_tokens")
+])
+async def manage_inventory(
+        interaction: discord.Interaction,
+        action: app_commands.Choice[str],
+        user: discord.Member,
+        # Change item_name to a Literal for a hard dropdown list
+        item_name: typing.Optional[typing.Literal["Double Nest", "Alternative Nest", "Catastrophic Event", "Custom Den", "Orphaned Together", "Scar Removal", "Water Spawn", "Food Spawn", "Shrink Ray", "Gender Swap"]] = None,
+        quantity: typing.Optional[int] = 1
+):
+
+    await interaction.response.defer(ephemeral=True)
+
+    user_id = str(user.id)
+    economy = load_economy()
+
+    if user_id not in economy:
+        economy[user_id] = {"balance": 0, "last_farm": 0, "inventory": []}
+
+    user_data = economy[user_id]
+    if "inventory" not in user_data:
+        user_data["inventory"] = []
+
+    qty = max(1, quantity if quantity else 1)
+    response_msg = ""
+
+    if action.value == "add_item":
+        if not item_name:
+            return await interaction.followup.send("❌ You must select an item from the list!", ephemeral=True)
+
+        for _ in range(qty):
+            user_data["inventory"].append(item_name)
+        response_msg = f"🎁 Added **{qty}x {item_name}** to {user.mention}'s inventory."
+
+    elif action.value == "remove_item":
+        if not item_name:
+            return await interaction.followup.send("❌ Specify which item to remove from the list.", ephemeral=True)
+
+        actual_count = user_data["inventory"].count(item_name)
+        remove_qty = min(qty, actual_count)
+
+        if remove_qty > 0:
+            for _ in range(remove_qty):
+                user_data["inventory"].remove(item_name)
+            response_msg = f"🗑️ Removed **{remove_qty}x {item_name}** from {user.mention}."
+        else:
+            return await interaction.followup.send(f"❌ {user.display_name} has no {item_name} to remove.", ephemeral=True)
+
+    elif action.value == "set_tokens":
+        user_data["balance"] = max(0, qty)
+        response_msg = f"💰 Set {user.mention}'s tokens to **{user_data['balance']}**."
+
+    elif action.value == "add_tokens":
+        user_data["balance"] += qty
+        response_msg = f"📈 Added {qty} tokens. New balance: **{user_data['balance']}**."
+
+    save_economy(economy)
+    await interaction.followup.send(response_msg, ephemeral=True)
+
+async def age_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+
+    tier = interaction.namespace.tier
+    if not tier:
+        return []
+
+    tier_data = ELDER_DATA.get(tier, {})
+    age_list = tier_data.get("ages", [])
+
+    # We return the "Choice" with a name (what they see) and a value (what the code uses)
+    return [
+        app_commands.Choice(name=f"{age[0]} Years", value=age[0])
+        for age in age_list if current.lower() in age[0].lower()
+    ]
+
+@bot.tree.command(name="elder", description="Request Elder status for a specific age")
+@app_commands.choices(tier=[
+    app_commands.Choice(name="Small", value="small"),
+    app_commands.Choice(name="Medium", value="medium"),
+    app_commands.Choice(name="Large", value="large"),
+    app_commands.Choice(name="Huge", value="huge"),
+])
+
+@app_commands.autocomplete(age=age_autocomplete)
+async def elder(interaction: discord.Interaction, tier: app_commands.Choice[str], age: str):
+    alderon_id = discord_to_alderon.get(str(interaction.user.id))
+
+    if not alderon_id:
+        await interaction.response.send_message("❌ Link your ID first using `/link`.", ephemeral=True)
+        return
+
+    live_status = current_player_dino.get(alderon_id)
+    if not live_status:
+        await interaction.response.send_message("❌ Calamity Bot doesn't see you in-game. Please **RESPAWN**!", ephemeral=True)
+        return
+
+    current_dino = live_status['type']
+    selected_tier = tier.value
+    tier_info = ELDER_DATA.get(selected_tier)
+
+    selected_age_data = next((a for a in tier_info["ages"] if a[0] == age), None)
+
+    if not selected_age_data:
+        valid_ages = ", ".join([a[0] for a in tier_info["ages"]])
+        await interaction.response.send_message(f"❌ Invalid age for {selected_tier}. Choose from: {valid_ages}",
+                                                ephemeral=True)
+        return
+
+    age_label, death_chance, speed_steps = selected_age_data
+
+    roll = random.randint(1, 100)
+    fate = "die" if roll <= death_chance else "live"
+
+    final_cw = tier_info["base_cw"] + tier_info["bonus_cw"]
+    final_speed = round(tier_info["start_speed"] - (tier_info["reduction"] * speed_steps), 2)
+
+    code = str(random.randint(100000, 999999))
+    pending_elders[code] = {
+        "alderon_id": alderon_id,
+        "cw": final_cw,
+        "speed": final_speed,
+        "dino_type": current_dino,
+        "fate": fate,
+        "age_label": age_label,
+        "expiry": (datetime.datetime.now() + datetime.timedelta(days=21)).timestamp()
+    }
+
+    await interaction.response.send_message(
+        f"**Code generated:**\nUse `!elder {code}` in-game to see your results.\n\n-# *Has old age finally caught up with you, or will you live to see another year*?", ephemeral=True)
+
+
+@bot.tree.command(name="elder_reapply", description="Restore your Elder stats after a death or restart")
+async def elder_reapply(interaction: discord.Interaction, token: str):
+    alderon_id = discord_to_alderon.get(str(interaction.user.id))
+
+    if not alderon_id:
+        await interaction.response.send_message("❌ Link your ID first using `/link`.", ephemeral=True)
+        return
+
+    user_sessions = active_elder_tokens.get(alderon_id, [])
+
+    if not user_sessions:
+        await interaction.response.send_message("❌ No active Elder sessions found.", ephemeral=True)
+        return
+
+    target_session = next((s for s in user_sessions if s['token'] == token.strip()), None)
+
+    if not target_session:
+        await interaction.response.send_message(f"❌ Token `{token}` is incorrect or expired.", ephemeral=True)
+        return
+
+    live_status = current_player_dino.get(alderon_id)
+    if not live_status:
+        await interaction.response.send_message("❌ Bot doesn't see you in-game. Move or respawn!", ephemeral=True)
+        return
+
+    required_dino = target_session.get('dino_type', "").lower()
+    required_char = target_session.get('char_name', "").lower()
+
+    current_dino = live_status.get('type', "").lower()
+    current_char = live_status.get('char_name', "").lower()
+
+    if current_dino != required_dino:
+        await interaction.response.send_message(
+            f"❌ **Dino Mismatch!**\nThis token is for a **{required_dino.capitalize()}**.\nYou are currently playing a **{current_dino.capitalize()}**.",
+            ephemeral=True
+        )
+        return
+
+    if required_char and current_char != required_char:
+        await interaction.response.send_message(
+            f"❌ **Character Mismatch!**\nThis token belongs to character: **{required_char.capitalize()}**.\nYou are currently playing: **{current_char.capitalize()}**.",
+            ephemeral=True
+        )
+        return
+
+    try:
+        await rcon(f'modattr "{alderon_id}" CombatWeight {target_session["cw"]}', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+        await rcon(f'setattr "{alderon_id}" SprintingSpeedMultiplier {target_session["speed"]}', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+        elder_session_used[alderon_id] = True
+
+        await interaction.response.send_message(
+            f"✨ **Success!** Your Elder stats for **{current_char.capitalize()}** ({current_dino.capitalize()}) have been restored.",
+            ephemeral=True)
+
+        await rcon(f'whisper "{alderon_id}" Elder stats reapplied successfully!', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
+
+    except Exception as e:
+        print(f"RCON Error during reapply: {e}")
+        await interaction.response.send_message("❌ Failed to connect to the game server.", ephemeral=True)
+
+bot.run('BOTTOKEN')
