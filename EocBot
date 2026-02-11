@@ -1609,37 +1609,6 @@ async def on_message(message):
                 print(f"❌ Error in !pause: {e}")
             return
 
-        elif "!torvo" in player_msg_lower:
-            target = alderon_id if (alderon_id and alderon_id != "None") else player_name
-            if not target: return
-
-            try:
-                response = await rcon(f'getattr "{target}" growth', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
-
-                growth_match = re.search(r"(\d+\.\d+)", response)
-
-                if growth_match:
-                    # Rounding to 3 places ensures 0.749123 becomes 0.749
-                    current_growth = round(float(growth_match.group(1)), 3)
-                    print(f"DEBUG: {target} rounded growth is {current_growth}")
-
-                    if current_growth == 0.749:
-                        # Success: Force to Sub-Adult (0.75)
-                        # This moves them past the Adolescent phase into the 'Paused' phase
-                        await rcon(f'setattr "{target}" growth 0.75', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
-                        await rcon(f'whisper "{target}" Verification success! You are now a Sub-Adult.', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
-                        await message.channel.send(f"🦕 **{player_name}** hit exactly 0.749 and evolved to Sub-Adult!")
-                    else:
-                        # Failure: Not exactly at the threshold
-                        # We tell them exactly what they are at so they know how close they are
-                        await rcon(f'whisper "{target}" Failed. Growth must be 0.749. You are at {current_growth}.', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
-                else:
-                    await rcon(f'whisper "{target}" Could not read growth data. Please try again.', host=RCON_IP, port=RCON_PORT, passwd=RCON_PASS)
-
-            except Exception as e:
-                print(f"❌ Error in !torvo: {e}")
-            return
-
 @bot.tree.command(name="player_history", description="Admin Only: Search logs for a specific Alderon ID")
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(aid="The Alderon ID to search for (e.g. 123-456-789)")
