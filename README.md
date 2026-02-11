@@ -29,17 +29,25 @@ allows user to reapply status with code that is dm'd to user once elder status i
 ## And In-Game Commands:
 **!time**
 sends a whisper to the user with the current in-game time (00:00 AM/PM format)
+
 **!farm**
 user can use this every 60 minutes to earn 25 tokens
+
 **!elder**
 user uses this after reaching a certain age based on when the dino is created. it will roll if the creature dies of old age or becomes an elder with higher chances each year. If elder is granted, a rise in combat weight and reduction of speed is modified. these stat changes also increase each additional year elder status is acheived
+
 **!h**
 sends a log of the user's current hunger to log channel in discord
+
 **!link code**
 finishes the th link proccess
+
 **!unstuck**
 teleports the user to a random location is stuck in terrain
+
 **!pause**
 pauses the users growth
+
 **!unpause**
 unpauses the user's growth
+
