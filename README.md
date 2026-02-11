@@ -3,20 +3,28 @@
 ## It has Discord Commands:
 **/shop**
 allows users to purchase items to enhance their gameplay
+
 **/inventory** 
 allows users to view purchased items and the number of tokens they have
+
 **/mutations**
 rolls a chance for a random mutation. Mutations are locked via what mutation skins each creature has. Also a chance to stack genetal mutations such as deaf/blindness.
+
 **/inherit**
 rolls a chance for a random mutation, but with higher chances for mutations that a parent carries or displays.
+
 **/nest**
 posts a nesting post that parents and offsrping claim. Parental mutations can be added and is locked per what species can have
+
 **/link**
 allows users to link alderon account and discord account to use in-game commands
+
 **/status**
 allows users to see current in-game time, weather, and player count
+
 **/reapply_elder**
 allows user to reapply status with code that is dm'd to user once elder status is acheived. this code is link to the specific creature via species and character select creature's name
+
 
 ## And In-Game Commands:
 **!time**
